@@ -4,64 +4,33 @@
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
   <link rel="manifest" href="manifest.webmanifest" />
-  <title>Arbitrary Dice (Voronoi)</title>
+  <title>Arbitrary Dice (Polyhedron)</title>
   <style>
-    html, body {
-      margin: 0;
-      height: 100%;
-      background: #000;
-      color: #fff;
-      font-family: system-ui, sans-serif;
-    }
-    canvas {
-      display: block;
-      width: 100vw;
-      height: 100vh;
-      touch-action: none;
-    }
+    html, body { margin:0; height:100%; background:#000; color:#fff; font-family: system-ui, sans-serif; }
+    canvas { display:block; width:100vw; height:100vh; touch-action:none; }
     #ui {
-      position: fixed;
-      inset: auto 0 0 0;
-      display: flex;
-      gap: 8px;
-      align-items: center;
-      padding: 10px env(safe-area-inset-right)
-               calc(10px + env(safe-area-inset-bottom))
-               env(safe-area-inset-left);
+      position: fixed; inset: auto 0 0 0; display: flex; gap: 8px; align-items: center;
+      padding: 10px env(safe-area-inset-right) calc(10px + env(safe-area-inset-bottom)) env(safe-area-inset-left);
       background: linear-gradient(180deg, #0000, #000a 50%, #000f);
       backdrop-filter: blur(6px);
     }
-    #ui input {
-      width: 90px;
-      background: #111;
-      border: 1px solid #444;
-      color: #fff;
-      padding: 6px 8px;
-      border-radius: 6px;
-    }
-    #ui button {
-      background: #1e88e5;
-      border: 0;
-      color: #fff;
-      padding: 8px 12px;
-      border-radius: 8px;
-      font-weight: 600;
-    }
+    #ui input { width: 90px; background:#111; border:1px solid #444; color:#fff; padding:6px 8px; border-radius:6px; }
+    #ui button { background:#1e88e5; border:0; color:#fff; padding:8px 12px; border-radius:8px; font-weight:600; }
     #ui button:active { transform: translateY(1px); }
-    #result { margin-left: auto; opacity: .85; }
+    #result { margin-left:auto; opacity:.85 }
   </style>
 </head>
 <body>
   <canvas id="c"></canvas>
+
   <div id="ui">
     <label for="nsides">Sides:</label>
-    <input id="nsides" type="number" min="3" max="256" step="1" value="37" />
+    <input id="nsides" type="number" min="3" max="128" step="1" value="13" />
     <button id="reseed">Reseed</button>
     <button id="roll">Roll</button>
     <span id="result">–</span>
   </div>
 
-  <!-- All logic is inside index.js. No resize() or camera here. -->
   <script type="module" src="./index.js"></script>
 </body>
 </html>
