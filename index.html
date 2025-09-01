@@ -41,18 +41,24 @@ const GOLDEN_ANGLE = Math.PI * (3 - Math.sqrt(5));
 const canvas = document.getElementById("c");
 const renderer = new THREE.WebGLRenderer({ canvas, antialias: true, alpha: false, powerPreference: "high-performance" });
 renderer.setPixelRatio(Math.min(devicePixelRatio, 2));
-resize();
-window.addEventListener("resize", resize);
 
 const scene = new THREE.Scene();
 scene.background = new THREE.Color(0x000000);
+
+// Create camera BEFORE calling resize()
 const camera = new THREE.PerspectiveCamera(60, 1, 0.01, 10);
 camera.position.set(0, 0, 2);
 
-const light = new THREE.DirectionalLight(0xffffff, 0.8);
-light.position.set(5, 3, 2);
-scene.add(light, new THREE.AmbientLight(0xffffff, 0.4));
-
+// Now safe to wire up resize
+function resize() {
+  const w = window.innerWidth, h = window.innerHeight;
+  renderer.setSize(w, h, false);
+  // guard in case someone calls before camera exists (defensive)
+  if (camera) { camera.aspect = w / h; camera.updateProjectionMatrix(); }
+}
+resize();
+window.addEventListener("resize", resize);
+  
 // --------- Sphere with Voronoi shader ----------
 const sphere = new THREE.Mesh(
   new THREE.SphereGeometry(0.85, 256, 192), // dense enough for nice edges
