@@ -213,11 +213,6 @@ document.addEventListener('visibilitychange', () => {
 setSeeds(parseInt(nsides.value, 10));
 renderer.setAnimationLoop(() => renderer.render(scene, camera));
 
-function resize() {
-  const w = window.innerWidth, h = window.innerHeight;
-  renderer.setSize(w, h, false);
-  camera.aspect = w/h; camera.updateProjectionMatrix();
-}
 </script>
 </body>
 </html>
