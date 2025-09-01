@@ -1,218 +1,66 @@
 <!doctype html>
 <html lang="en">
-<meta charset="utf-8" />
-<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
-<link rel="manifest" href="manifest.webmanifest" />
-<title>Arbitrary Dice (Voronoi)</title>
-<style>
-  html, body { margin:0; height:100%; background:#000; color:#fff; font-family: system-ui, sans-serif; }
-  #ui {
-    position: fixed; inset: auto 0 0 0; display: flex; gap: 8px; align-items: center;
-    padding: 10px env(safe-area-inset-right) calc(10px + env(safe-area-inset-bottom)) env(safe-area-inset-left);
-    background: linear-gradient(180deg, #0000, #000a 50%, #000f);
-    backdrop-filter: blur(6px);
-  }
-  #ui input { width: 90px; background:#111; border:1px solid #444; color:#fff; padding:6px 8px; border-radius:6px; }
-  #ui button { background:#1e88e5; border:0; color:#fff; padding:8px 12px; border-radius:8px; font-weight:600; }
-  #ui button:active { transform: translateY(1px); }
-  canvas { display:block; touch-action:none }
-  #result { margin-left:auto; opacity:.85 }
-</style>
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+  <link rel="manifest" href="manifest.webmanifest" />
+  <title>Arbitrary Dice (Voronoi)</title>
+  <style>
+    html, body {
+      margin: 0;
+      height: 100%;
+      background: #000;
+      color: #fff;
+      font-family: system-ui, sans-serif;
+    }
+    canvas {
+      display: block;
+      width: 100vw;
+      height: 100vh;
+      touch-action: none;
+    }
+    #ui {
+      position: fixed;
+      inset: auto 0 0 0;
+      display: flex;
+      gap: 8px;
+      align-items: center;
+      padding: 10px env(safe-area-inset-right)
+               calc(10px + env(safe-area-inset-bottom))
+               env(safe-area-inset-left);
+      background: linear-gradient(180deg, #0000, #000a 50%, #000f);
+      backdrop-filter: blur(6px);
+    }
+    #ui input {
+      width: 90px;
+      background: #111;
+      border: 1px solid #444;
+      color: #fff;
+      padding: 6px 8px;
+      border-radius: 6px;
+    }
+    #ui button {
+      background: #1e88e5;
+      border: 0;
+      color: #fff;
+      padding: 8px 12px;
+      border-radius: 8px;
+      font-weight: 600;
+    }
+    #ui button:active { transform: translateY(1px); }
+    #result { margin-left: auto; opacity: .85; }
+  </style>
+</head>
 <body>
-<canvas id="c"></canvas>
-
-<div id="ui">
-  <label for="nsides">Sides:</label>
-  <input id="nsides" type="number" min="3" max="256" step="1" value="37" />
-  <button id="reseed">Reseed</button>
-  <button id="roll">Roll</button>
-  <span id="result">–</span>
-</div>
-
-<script type="module">
-import * as THREE from "https://cdn.jsdelivr.net/npm/three@0.165/build/three.module.js";
-if ("serviceWorker" in navigator) navigator.serviceWorker.register("./service-worker.js");
-// --------- Config ----------
-const MAX_SEEDS = 256; // safe mobile cap; bump if you want
-const DURATION_MS = 1000; // spin duration
-const GOLDEN_ANGLE = Math.PI * (3 - Math.sqrt(5));
-
-// --------- Scene ----------
-const canvas = document.getElementById("c");
-const renderer = new THREE.WebGLRenderer({ canvas, antialias: true, alpha: false, powerPreference: "high-performance" });
-renderer.setPixelRatio(Math.min(devicePixelRatio, 2));
-
-const scene = new THREE.Scene();
-scene.background = new THREE.Color(0x000000);
-
-// Create camera BEFORE calling resize()
-const camera = new THREE.PerspectiveCamera(60, 1, 0.01, 10);
-camera.position.set(0, 0, 2);
-
-// Now safe to wire up resize
-function resize() {
-  const w = window.innerWidth, h = window.innerHeight;
-  renderer.setSize(w, h, false);
-  // guard in case someone calls before camera exists (defensive)
-  if (camera) { camera.aspect = w / h; camera.updateProjectionMatrix(); }
-}
-resize();
-window.addEventListener("resize", resize);
-  
-// --------- Sphere with Voronoi shader ----------
-const sphere = new THREE.Mesh(
-  new THREE.SphereGeometry(0.85, 256, 192), // dense enough for nice edges
-  new THREE.ShaderMaterial({
-    uniforms: {
-      seeds: { value: new Array(MAX_SEEDS).fill(0).map(()=>new THREE.Vector3(1,0,0)) },
-      count: { value: 0 },
-      edge:  { value: 0.02 } // edge width
-    },
-    vertexShader: /*glsl*/`
-      varying vec3 vN;
-      void main() {
-        vN = normalize(normalMatrix * normal);
-        gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0);
-      }`,
-    fragmentShader: /*glsl*/`
-      precision highp float;
-      #define MAX_SEEDS ${MAX_SEEDS}
-      uniform vec3  seeds[MAX_SEEDS];
-      uniform int   count;
-      uniform float edge;
-      varying vec3  vN;
-
-      // Small hash → pastel-ish colors per index
-      vec3 idxColor(int i) {
-        float x = fract(sin(float(i)*12.9898)*43758.5453);
-        float y = fract(sin(float(i)*78.233 )*12345.6789);
-        float z = fract(sin(float(i)* 3.1415)*98765.4321);
-        vec3 c = vec3(x,y,z);
-        return 0.6 + 0.4*c; // brighten
-      }
-
-      void main() {
-        vec3 n = normalize(vN);
-
-        // Find closest seed by max dot (same as min angular distance)
-        float bestDot = -1.0;
-        int bestIdx = 0;
-        float secondDot = -1.0;
-        for (int i=0; i<MAX_SEEDS; ++i) {
-          if (i >= count) break;
-          float d = dot(n, normalize(seeds[i]));
-          if (d > bestDot) {
-            secondDot = bestDot;
-            bestDot = d; bestIdx = i;
-          } else if (d > secondDot) {
-            secondDot = d;
-          }
-        }
-
-        // Edge factor: angle gap to runner-up approximates cell border
-        float edgeMix = smoothstep(0.0, edge, (bestDot - secondDot));
-        vec3 base = idxColor(bestIdx);
-        vec3 color = mix(vec3(0.05), base, edgeMix); // dark edges
-        gl_FragColor = vec4(color, 1.0);
-      }`,
-    flatShading: true
-  })
-);
-scene.add(sphere);
-
-// --------- Seeds (Fibonacci lattice on a sphere) ----------
-function fibonacciSeeds(n) {
-  const out = [];
-  for (let i=0; i<n; i++) {
-    const t = (i + 0.5) / n;
-    const z = 1.0 - 2.0 * t;
-    const r = Math.sqrt(Math.max(0.0, 1.0 - z*z));
-    const phi = i * GOLDEN_ANGLE;
-    out.push(new THREE.Vector3(Math.cos(phi)*r, z, Math.sin(phi)*r).normalize());
-  }
-  return out;
-}
-
-function setSeeds(n) {
-  n = Math.max(3, Math.min(MAX_SEEDS, n|0));
-  const pts = fibonacciSeeds(n);
-  const u = sphere.material.uniforms;
-  for (let i=0; i<MAX_SEEDS; i++) u.seeds.value[i].set(1,0,0); // reset
-  for (let i=0; i<n; i++) u.seeds.value[i].copy(pts[i]);
-  u.count.value = n;
-  // Store for rolling logic
-  sphere.userData.seedDirs = pts;
-}
-
-// --------- Roll: rotate so chosen face points at camera ----------
-let anim = null;
-function rollTo(idx) {
-  const dirs = sphere.userData.seedDirs;
-  if (!dirs || !dirs.length) return;
-  idx = ((idx|0)%dirs.length + dirs.length) % dirs.length;
-  const targetDir = dirs[idx].clone(); // in object space, camera looks +Z in view → align target to +Z in world
-  // Compute quaternion that rotates targetDir to (0,0,1) in world, then apply relative to sphere's current rotation.
-  const z = new THREE.Vector3(0,0,1);
-  const q = new THREE.Quaternion().setFromUnitVectors(targetDir.clone().applyQuaternion(sphere.quaternion), z);
-  const start = sphere.quaternion.clone();
-  const end   = q.multiply(start); // rotate from current to align chosen face
-
-  const startTime = performance.now();
-  const dur = DURATION_MS;
-  cancelAnimationFrame(anim?.rafId);
-  anim = { rafId: 0 };
-  const ease = t => 1 - Math.pow(1 - t, 3); // ease-out
-
-  const tick = () => {
-    const now = performance.now();
-    let t = Math.min(1, (now - startTime)/dur);
-    t = ease(t);
-    THREE.Quaternion.slerp(start, end, sphere.quaternion, t);
-    if (t < 1) anim.rafId = requestAnimationFrame(tick);
-  };
-  tick();
-
-  // Update UI result after a tiny delay to feel synced
-  setTimeout(() => result.textContent = `Result: ${idx+1} / d${dirs.length}`, dur * 0.9);
-}
-
-function randomRoll() {
-  const n = sphere.material.uniforms.count.value|0;
-  const idx = (Math.random()*n)|0;
-  rollTo(idx);
-}
-
-// --------- UI ----------
-const nsides = document.getElementById("nsides");
-const reseedBtn = document.getElementById("reseed");
-const rollBtn = document.getElementById("roll");
-const result = document.getElementById("result");
-
-reseedBtn.onclick = () => { setSeeds(parseInt(nsides.value, 10) || 37); result.textContent = "–"; };
-rollBtn.onclick = randomRoll;
-document.addEventListener("keydown", e => { if (e.key === " ") randomRoll(); });
-
-// Double-tap fullscreen
-let lastTap = 0;
-document.addEventListener("touchend", () => {
-  const now = performance.now();
-  if (now - lastTap < 300) document.documentElement.requestFullscreen?.();
-  lastTap = now;
-});
-
-// Wake lock (best-effort)
-let wl;
-navigator.wakeLock?.request('screen').then(lock => wl = lock).catch(()=>{});
-document.addEventListener('visibilitychange', () => {
-  if (document.visibilityState === 'visible' && navigator.wakeLock && !wl) {
-    navigator.wakeLock.request('screen').then(lock => wl = lock).catch(()=>{});
-  }
-});
-
-// --------- Boot ----------
-setSeeds(parseInt(nsides.value, 10));
-renderer.setAnimationLoop(() => renderer.render(scene, camera));
-
-</script>
+  <canvas id="c"></canvas>
+  <div id="ui">
+    <label for="nsides">Sides:</label>
+    <input id="nsides" type="number" min="3" max="256" step="1" value="37" />
+    <button id="reseed">Reseed</button>
+    <button id="roll">Roll</button>
+    <span id="result">–</span>
+  </div>
+  <!-- Load the main logic -->
+  <script type="module" src="./index.js"></script>
 </body>
 </html>
